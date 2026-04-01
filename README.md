@@ -60,11 +60,6 @@ effects, and validates robustness — all reproducible from public data only.
 | Saliency ratio | Lq/Ld | 1.64 | — |
 | Rotor inertia | J | 8.41×10⁻⁴ | kg·m² |
 
-**Source:** Caruso et al., *"Characterization of the parameters of interior permanent magnet
-synchronous motors for a loss model algorithm"*, Measurement, Elsevier, 2017  
-**DOI:** [10.1016/j.measurement.2017.04.041](https://doi.org/10.1016/j.measurement.2017.04.041)  
-**Parameters extracted from:** Table 1, "Rated values and parameters of the IPMSM under test"  
-**Operating point:** id = 0 A, iq = rated current (Ld, Lq measured by blocked-rotor test)
 
 ---
 
