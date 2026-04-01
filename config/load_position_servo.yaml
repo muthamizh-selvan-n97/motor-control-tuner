@@ -1,0 +1,11 @@
+# Position servo load — pure inertia, position loop active
+# TL = 0 (friction negligible)
+
+load_type: position_servo
+name: "Position servo (inertia load)"
+
+J_load_kgm2: 1.0e-3
+B_load_Nms_rad: 0.0         # load-side viscous friction — negligible for inertia servo load
+k_fan: 0.0                  # not used
+TL_Nm: 0.0                  # friction negligible
+position_loop_active: true

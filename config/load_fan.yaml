@@ -1,0 +1,13 @@
+# Fan load — quadratic torque characteristic
+# TL = k_fan * omega^2  (N·m), where omega is mechanical speed in rad/s
+# At rated speed (314.2 rad/s): TL ≈ 1.1 N·m  (≈35% of Delta motor rated torque)
+
+load_type: fan
+name: "Fan load (quadratic)"
+
+J_load_kgm2: 7.95e-4       # 3× Delta motor inertia (typical axial fan)
+B_load_Nms_rad: 0.0         # load-side viscous friction — negligible for fan (drag captured by k_fan)
+k_fan: 1.12e-5              # TL = k_fan * omega^2 (N·m / (rad/s)^2)
+                             # At 314.2 rad/s: 1.12e-5 * 314.2^2 ≈ 1.11 N·m
+TL_Nm: 0.0                  # not used for fan (computed from k_fan * omega^2)
+position_loop_active: false

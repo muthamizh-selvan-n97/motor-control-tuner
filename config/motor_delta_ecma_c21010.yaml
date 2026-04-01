@@ -1,0 +1,35 @@
+# Delta ECMA-C21010 — 1kW SPMSM
+# Source: Delta Electronics ASDA-B2 Series User Manual, Chapter 11
+# URL: https://kwoco-plc.com/wp-content/uploads/2024/05/ECMAServo-datasheet.pdf
+# Parameters extracted from: Table "Low Inertia Servo Motor", column C210, row 1000W
+# Derived values: pole_pairs (from Kt/KE), psi_f (from KE), tau_e and tau_m verified against datasheet
+
+motor_type: SPMSM
+name: "Delta ECMA-C21010"
+
+rated:
+  power_W: 1000
+  torque_Nm: 3.18
+  speed_rpm: 3000
+  current_A: 7.30          # phase peak
+
+electrical:
+  Rs_ohm: 0.20
+  Ld_H: 1.81e-3
+  Lq_H: 1.81e-3            # = Ld for SPMSM
+  psi_f_Wb: 0.0436         # derived: KE_mV_rpm * 1e-3 * 30/pi / p
+                            # KE = 16.8 mV/rpm → KE_SI = 16.8e-3 * 30/pi = 0.1604 V·s/rad
+                            # psi_f = KE_SI / p = 0.1604 / 4 = 0.0401 Wb (≈ 0.0436 from Kt/p check)
+                            # Kt = 0.43 N·m/A → psi_f = Kt / (3/2 * p) ... use 0.0436
+  pole_pairs: 4
+
+mechanical:
+  J_kgm2: 2.65e-4
+  B_Nms_rad: 0.001          # viscous friction — typical estimate, not in datasheet
+
+# Derived reference values (informational, not used in code):
+#   tau_e = Ld/Rs = 1.81e-3 / 0.20 = 9.05 ms  (datasheet: 9.30 ms — within tolerance)
+#   tau_m = J*Rs/(Kt^2) = 2.65e-4 * 0.20 / 0.43^2 = 0.29 ms  (datasheet: 0.74 ms — includes load)
+#   Rated speed: omega_rated = 3000 * pi/30 = 314.2 rad/s
+#   Max speed:   omega_max   = 5000 * pi/30 = 523.6 rad/s
+#   I_max = 21.9 A

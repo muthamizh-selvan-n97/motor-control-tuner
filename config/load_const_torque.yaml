@@ -1,0 +1,11 @@
+# Constant torque load — conveyor / compressor
+# TL = constant regardless of speed
+
+load_type: constant_torque
+name: "Constant torque (conveyor)"
+
+J_load_kgm2: 5.0e-4
+B_load_Nms_rad: 0.0         # load-side viscous friction — set > 0 for gearbox/pump applications
+k_fan: 0.0                  # not used for constant torque
+TL_Nm: 2.0                  # constant load torque in N·m
+position_loop_active: false

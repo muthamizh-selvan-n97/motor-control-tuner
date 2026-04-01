@@ -1,0 +1,33 @@
+# Magnetic S.r.l. BLQ-40 — 2kW IPMSM
+# Source: Caruso et al., "Characterization of the parameters of interior permanent magnet
+#         synchronous motors for a loss model algorithm," Measurement, Elsevier, 2017.
+# DOI: 10.1016/j.measurement.2017.04.041
+# Parameters extracted from: Table 1, "Rated values and parameters of the IPMSM under test"
+# Operating point: id=0 A, iq=rated current (Ld, Lq at this point per blocked-rotor test)
+
+motor_type: IPMSM
+name: "Magnetic BLQ-40"
+
+rated:
+  power_W: 2000
+  torque_Nm: 6.37
+  speed_rpm: 3000
+  current_A: 5.6            # rms
+
+electrical:
+  Rs_ohm: 0.47
+  Ld_H: 5.99e-3
+  Lq_H: 9.80e-3             # > Ld → saliency ratio Lq/Ld = 1.64
+  psi_f_Wb: 0.255
+  pole_pairs: 3             # 6-pole machine
+
+mechanical:
+  J_kgm2: 8.41e-4
+  B_Nms_rad: 0.002          # viscous friction — paper estimate
+
+# Derived reference values (informational, not used in code):
+#   saliency_ratio = Lq/Ld = 9.80/5.99 = 1.636
+#   tau_d = Ld/Rs = 5.99e-3 / 0.47 = 12.75 ms
+#   tau_q = Lq/Rs = 9.80e-3 / 0.47 = 20.85 ms
+#   omega_rated = 3000 * pi/30 = 314.2 rad/s
+#   MTPA: id_MTPA != 0 due to reluctance torque (Lq > Ld)
