@@ -259,3 +259,313 @@ class TestPlottingAndPrinting:
     def test_ipmsm_plot_no_crash(self, ipmsm_pid, ipmsm_sim, tmp_path):
         save = str(tmp_path / "ipmsm_id_plot.png")
         ipmsm_pid.plot_identification(ipmsm_sim, save_path=save)
+
+
+# ===========================================================================
+# Mechanical identification tests
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Fixtures — mechanical (require load_cfg)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def spmsm_mech_pid():
+    motor_cfg, load_cfg = load_config(
+        "config/motor_delta_ecma_c21010.yaml",
+        "config/load_fan.yaml",
+    )
+    return ParameterIdentifier(motor_cfg, load_cfg)
+
+
+@pytest.fixture(scope="module")
+def ipmsm_mech_pid():
+    motor_cfg, load_cfg = load_config(
+        "config/motor_magnetic_blq40.yaml",
+        "config/load_const_torque.yaml",
+    )
+    return ParameterIdentifier(motor_cfg, load_cfg)
+
+
+@pytest.fixture(scope="module")
+def servo_mech_pid():
+    motor_cfg, load_cfg = load_config(
+        "config/motor_delta_ecma_c21010.yaml",
+        "config/load_position_servo.yaml",
+    )
+    return ParameterIdentifier(motor_cfg, load_cfg)
+
+
+@pytest.fixture(scope="module")
+def spmsm_mech_sim(spmsm_mech_pid):
+    return spmsm_mech_pid.simulate_mechanical(noise_std_frac=0.02)
+
+
+@pytest.fixture(scope="module")
+def ipmsm_mech_sim(ipmsm_mech_pid):
+    return ipmsm_mech_pid.simulate_mechanical(noise_std_frac=0.02)
+
+
+@pytest.fixture(scope="module")
+def servo_mech_sim(servo_mech_pid):
+    return servo_mech_pid.simulate_mechanical(noise_std_frac=0.02)
+
+
+# ---------------------------------------------------------------------------
+# Structure checks
+# ---------------------------------------------------------------------------
+
+class TestSimulateMechanicalStructure:
+    _REQUIRED = ("p", "KE_SI", "psi_f_ke", "J_total", "J_load",
+                 "B_total", "B_load", "source")
+    _RAW = ("_f_e_noisy", "_omega_mech_test", "_omega_mechs_ke",
+            "_bemf_noisy_ke", "_KE_SI_fit", "_t_accel", "_omega_accel",
+            "_alpha_fit", "_omega_sweep", "_Te_ss_noisy", "_B_total_fit")
+
+    def test_required_keys_present(self, spmsm_mech_sim):
+        for key in self._REQUIRED:
+            assert key in spmsm_mech_sim, f"Missing key: {key}"
+
+    def test_source_correct(self, spmsm_mech_sim):
+        assert spmsm_mech_sim["source"] == "simulated_mechanical"
+
+    def test_p_is_int(self, spmsm_mech_sim):
+        assert isinstance(spmsm_mech_sim["p"], int)
+
+    def test_floats_positive(self, spmsm_mech_sim):
+        for key in ("KE_SI", "psi_f_ke", "J_total"):
+            assert spmsm_mech_sim[key] > 0, f"{key} must be > 0"
+
+    def test_raw_arrays_present(self, spmsm_mech_sim):
+        for key in self._RAW:
+            assert key in spmsm_mech_sim, f"Missing raw key: {key}"
+
+    def test_no_load_cfg_raises(self, spmsm_pid):
+        with pytest.raises(RuntimeError, match="load_cfg"):
+            spmsm_pid.simulate_mechanical()
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — Pole pairs
+# ---------------------------------------------------------------------------
+
+class TestPoleParisIdentification:
+    def test_p_exact_at_2pct_noise(self, spmsm_mech_pid, spmsm_mech_sim):
+        assert spmsm_mech_sim["p"] == spmsm_mech_pid._p_true
+
+    def test_p_exact_at_zero_noise(self, spmsm_mech_pid):
+        res = spmsm_mech_pid.simulate_mechanical(noise_std_frac=0.0)
+        assert res["p"] == spmsm_mech_pid._p_true
+
+    def test_p_ipmsm_correct(self, ipmsm_mech_pid, ipmsm_mech_sim):
+        assert ipmsm_mech_sim["p"] == ipmsm_mech_pid._p_true
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — KE_SI
+# ---------------------------------------------------------------------------
+
+class TestKESIIdentification:
+    _TOL = 0.08
+
+    def test_KE_SI_within_tolerance(self, spmsm_mech_pid, spmsm_mech_sim):
+        KE_true = spmsm_mech_pid._psi_f_true * spmsm_mech_pid._p_true
+        rel_err = abs(spmsm_mech_sim["KE_SI"] - KE_true) / KE_true
+        assert rel_err < self._TOL, f"KE_SI error {rel_err*100:.2f}%"
+
+    def test_psi_f_ke_consistent_with_KE_and_p(self, spmsm_mech_sim):
+        implied = spmsm_mech_sim["KE_SI"] / spmsm_mech_sim["p"]
+        assert math.isclose(spmsm_mech_sim["psi_f_ke"], implied, rel_tol=1e-9)
+
+    def test_KE_SI_zero_noise_exact(self, spmsm_mech_pid):
+        res = spmsm_mech_pid.simulate_mechanical(noise_std_frac=0.0)
+        KE_true = spmsm_mech_pid._psi_f_true * spmsm_mech_pid._p_true
+        assert math.isclose(res["KE_SI"], KE_true, rel_tol=1e-6)
+
+    def test_ipmsm_KE_SI_correct(self, ipmsm_mech_pid, ipmsm_mech_sim):
+        KE_true = ipmsm_mech_pid._psi_f_true * ipmsm_mech_pid._p_true
+        rel_err = abs(ipmsm_mech_sim["KE_SI"] - KE_true) / KE_true
+        assert rel_err < self._TOL
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — J_total
+# ---------------------------------------------------------------------------
+
+class TestJTotalIdentification:
+    _TOL = 0.05   # 5% — generous; linear regression over 500 pts gives <0.5% typically
+
+    def test_J_total_within_tolerance(self, spmsm_mech_pid, spmsm_mech_sim):
+        rel_err = abs(spmsm_mech_sim["J_total"] - spmsm_mech_pid._J_total_true) \
+                  / spmsm_mech_pid._J_total_true
+        assert rel_err < self._TOL, f"J_total error {rel_err*100:.2f}%"
+
+    def test_J_load_derived_correctly(self, spmsm_mech_pid, spmsm_mech_sim):
+        implied = spmsm_mech_sim["J_total"] - spmsm_mech_pid._J_motor_true
+        assert math.isclose(spmsm_mech_sim["J_load"], implied, rel_tol=1e-9)
+
+    def test_J_total_positive(self, spmsm_mech_sim):
+        assert spmsm_mech_sim["J_total"] > 0
+
+    def test_J_total_zero_noise(self, spmsm_mech_pid):
+        res = spmsm_mech_pid.simulate_mechanical(noise_std_frac=0.0)
+        rel_err = abs(res["J_total"] - spmsm_mech_pid._J_total_true) \
+                  / spmsm_mech_pid._J_total_true
+        assert rel_err < 0.01, f"Zero-noise J_total error {rel_err*100:.3f}%"
+
+    def test_ipmsm_J_total_correct(self, ipmsm_mech_pid, ipmsm_mech_sim):
+        rel_err = abs(ipmsm_mech_sim["J_total"] - ipmsm_mech_pid._J_total_true) \
+                  / ipmsm_mech_pid._J_total_true
+        assert rel_err < self._TOL
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — B_total + load coefficients
+# ---------------------------------------------------------------------------
+
+class TestBTotalIdentification:
+    _TOL = 0.10   # 10% — B_total is a small number; relative noise can be larger
+
+    def test_B_total_fan_within_tolerance(self, spmsm_mech_pid, spmsm_mech_sim):
+        rel_err = abs(spmsm_mech_sim["B_total"] - spmsm_mech_pid._B_total_true) \
+                  / spmsm_mech_pid._B_total_true
+        assert rel_err < self._TOL, f"B_total error {rel_err*100:.2f}%"
+
+    def test_k_fan_within_tolerance(self, spmsm_mech_pid, spmsm_mech_sim):
+        assert spmsm_mech_sim["k_fan"] is not None
+        rel_err = abs(spmsm_mech_sim["k_fan"] - spmsm_mech_pid._k_fan_true) \
+                  / spmsm_mech_pid._k_fan_true
+        assert rel_err < self._TOL, f"k_fan error {rel_err*100:.2f}%"
+
+    def test_TL_const_none_for_fan(self, spmsm_mech_sim):
+        assert spmsm_mech_sim["TL_const"] is None
+
+    def test_B_total_const_torque(self, ipmsm_mech_pid, ipmsm_mech_sim):
+        rel_err = abs(ipmsm_mech_sim["B_total"] - ipmsm_mech_pid._B_total_true) \
+                  / max(ipmsm_mech_pid._B_total_true, 1e-6)
+        assert rel_err < self._TOL
+
+    def test_TL_const_within_tolerance(self, ipmsm_mech_pid, ipmsm_mech_sim):
+        assert ipmsm_mech_sim["TL_const"] is not None
+        rel_err = abs(ipmsm_mech_sim["TL_const"] - ipmsm_mech_pid._TL_const_true) \
+                  / ipmsm_mech_pid._TL_const_true
+        assert rel_err < self._TOL
+
+    def test_k_fan_none_for_const_torque(self, ipmsm_mech_sim):
+        assert ipmsm_mech_sim["k_fan"] is None
+
+    def test_servo_both_none(self, servo_mech_sim):
+        assert servo_mech_sim["k_fan"] is None
+        assert servo_mech_sim["TL_const"] is None
+
+    def test_servo_B_total_positive(self, servo_mech_sim):
+        assert servo_mech_sim["B_total"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility
+# ---------------------------------------------------------------------------
+
+class TestMechanicalReproducibility:
+    def test_same_seed_identical(self, spmsm_mech_pid):
+        r1 = spmsm_mech_pid.simulate_mechanical(noise_std_frac=0.02)
+        r2 = spmsm_mech_pid.simulate_mechanical(noise_std_frac=0.02)
+        assert r1["p"] == r2["p"]
+        assert math.isclose(r1["KE_SI"], r2["KE_SI"], rel_tol=1e-12)
+        assert math.isclose(r1["J_total"], r2["J_total"], rel_tol=1e-12)
+
+    def test_electrical_simulate_unaffected_by_load_cfg(self, spmsm_pid, spmsm_mech_pid):
+        """simulate() result must be identical whether load_cfg was supplied or not."""
+        r_no_load = spmsm_pid.simulate(noise_std_frac=0.02)
+        r_with_load = spmsm_mech_pid.simulate(noise_std_frac=0.02)
+        assert math.isclose(r_no_load["Rs"], r_with_load["Rs"], rel_tol=1e-12)
+        assert math.isclose(r_no_load["psi_f"], r_with_load["psi_f"], rel_tol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Mechanical override()
+# ---------------------------------------------------------------------------
+
+class TestMechanicalOverride:
+    def test_exact_true_values_accepted(self, spmsm_mech_pid):
+        pid = spmsm_mech_pid
+        res = pid.override(
+            p=pid._p_true,
+            KE_SI=pid._psi_f_true * pid._p_true,
+            J_total=pid._J_total_true,
+            J_load=pid._J_load_true,
+            B_total=pid._B_total_true,
+            B_load=pid._B_load_true,
+            k_fan=pid._k_fan_true,
+        )
+        assert res["p"] == pid._p_true
+        assert math.isclose(res["J_total"], pid._J_total_true, rel_tol=1e-9)
+
+    def test_invalid_p_raises(self, spmsm_mech_pid):
+        with pytest.raises(ValueError, match="p"):
+            spmsm_mech_pid.override(p=0)
+
+    def test_negative_J_raises(self, spmsm_mech_pid):
+        with pytest.raises(ValueError, match="J_total"):
+            spmsm_mech_pid.override(J_total=-1e-4)
+
+    def test_J_less_than_J_motor_raises(self, spmsm_mech_pid):
+        pid = spmsm_mech_pid
+        with pytest.raises(ValueError, match="J_motor"):
+            pid.override(J_total=pid._J_motor_true * 0.5)
+
+    def test_negative_B_raises(self, spmsm_mech_pid):
+        with pytest.raises(ValueError, match="B_total"):
+            spmsm_mech_pid.override(B_total=-0.001)
+
+    def test_B_less_than_B_motor_raises(self, spmsm_mech_pid):
+        pid = spmsm_mech_pid
+        with pytest.raises(ValueError, match="B_motor"):
+            pid.override(B_total=pid._B_motor_true * 0.5)
+
+    def test_mechanical_without_load_cfg_raises(self, spmsm_pid):
+        with pytest.raises(RuntimeError, match="load_cfg"):
+            spmsm_pid.override(J_total=1e-4)
+
+    def test_defaults_to_ground_truth(self, spmsm_mech_pid):
+        pid = spmsm_mech_pid
+        res = pid.override()
+        assert math.isclose(res["J_total"], pid._J_total_true, rel_tol=1e-9)
+        assert math.isclose(res["B_total"], pid._B_total_true, rel_tol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Mechanical plotting and printing (smoke tests)
+# ---------------------------------------------------------------------------
+
+class TestMechanicalPlottingAndPrinting:
+    def test_plot_mechanical_fan_no_crash(self, spmsm_mech_pid, spmsm_mech_sim, tmp_path):
+        spmsm_mech_pid.plot_mechanical(
+            spmsm_mech_sim, save_path=str(tmp_path / "mech_fan.png")
+        )
+
+    def test_plot_mechanical_ipmsm_no_crash(self, ipmsm_mech_pid, ipmsm_mech_sim, tmp_path):
+        ipmsm_mech_pid.plot_mechanical(
+            ipmsm_mech_sim, save_path=str(tmp_path / "mech_ipmsm.png")
+        )
+
+    def test_plot_mechanical_servo_no_crash(self, servo_mech_pid, servo_mech_sim, tmp_path):
+        servo_mech_pid.plot_mechanical(
+            servo_mech_sim, save_path=str(tmp_path / "mech_servo.png")
+        )
+
+    def test_print_comparison_mechanical_shows_J(self, spmsm_mech_pid, spmsm_mech_sim, capsys):
+        spmsm_mech_pid.print_comparison(spmsm_mech_sim)
+        out = capsys.readouterr().out
+        assert "J_total" in out
+
+    def test_print_comparison_electrical_only_no_J(self, spmsm_pid, spmsm_sim, capsys):
+        spmsm_pid.print_comparison(spmsm_sim)
+        out = capsys.readouterr().out
+        assert "J_total" not in out
+
+    def test_plot_identification_unchanged(self, spmsm_pid, spmsm_sim, tmp_path):
+        """Regression guard: existing plot_identification() must still work."""
+        spmsm_pid.plot_identification(
+            spmsm_sim, save_path=str(tmp_path / "elec_id.png")
+        )
