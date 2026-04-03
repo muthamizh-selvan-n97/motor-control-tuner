@@ -1,6 +1,6 @@
 # motor-control-tuner
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_GITHUB_USERNAME/motor-control-tuner/blob/master/notebook/control_tuner.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/muthamizh-selvan-n97/motor-control-tuner/blob/master/notebook/control_tuner.ipynb)
 
 A practitioner's toolkit for PMSM control loop tuning.
 
